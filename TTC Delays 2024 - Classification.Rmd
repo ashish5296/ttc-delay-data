@@ -434,16 +434,57 @@ df$Station <- factor(df$Station)
 ```{r}
 levels(df$Station)
 ```
+The station looks clean and now we can perform station specific analysis.
+
+Visualize stations with most delays:
 
 ```{r}
-# Prepare data in long format
+# Count frequency of each station
+station_counts <- as.data.frame(table(df$Station))
+
+# Order by descending frequency
+station_counts <- station_counts[order(-station_counts$Freq), ]
+
+# Take top 5
+top5_stations <- head(station_counts, 5)
+
+# Bar plot
+library(ggplot2)
+ggplot(top5_stations, aes(x = reorder(Var1, -Freq), y = Freq)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(title = "Top 5 Stations with Most Delays",
+       x = "Station",
+       y = "Number of Delays") +
+  theme_minimal()
+
+
+```
+
+now we further create a WeekGroup variable for WeekDay and WeekEnd, then we can drop "Day" column
+
+```{r}
+# Create new WeekGroup variable
+df$Day <- as.character(df$Day)
+
+df$WeekGroup <- ifelse(df$Day %in% c("Saturday", "Sunday"), "Weekend", "Weekday")
+
+df$WeekGroup <- factor(df$WeekGroup)
+df <- df[, -2]
+
+summary(df)
+```
+
+
+
+```{r}
+
+# Gather Min.Delay and Min.Gap into one long-format data frame
 delay_data <- data.frame(
-  Category = c(rep("Min.Delay", length(df$Min.Delay)),
-               rep("Min.Gap", length(df$Min.Gap))),
+  Category = rep(c("Min.Delay", "Min.Gap"), each = nrow(df)),
   Value = c(df$Min.Delay, df$Min.Gap)
 )
 
-# Plot
+# Box-Plot of Minutes of Delay and Gap
 ggplot(delay_data, aes(x = Category, y = Value)) +
   geom_boxplot(fill = "lightgreen") +
   labs(title = "Boxplot of Min.Delay and Min.Gap",
@@ -451,9 +492,30 @@ ggplot(delay_data, aes(x = Category, y = Value)) +
        y = "Minutes") +
   theme_minimal()
 
+par(mfrow = c(2, 2))
+
+
+# histgram of distribution
+
+hist(df$Min.Delay, 
+   main = "Delay (in Minutes)", 
+   xlab = "Value", 
+   ylab = "Frequency", 
+   col = "#ADD8E6", 
+   freq = FALSE) # `freq = FALSE` scales the histogram for overlaying density
+lines(density(df$Min.Delay))
+
+hist(df$Min.Gap, 
+   main = "Gap (in Minutes)", 
+   xlab = "Value", 
+   ylab = "Frequency", 
+   col = "#ADD8E6", 
+   freq = FALSE) # `freq = FALSE` scales the histogram for overlaying density
+lines(density(df$Min.Gap))
+
 ```
 
-There are few delays and gaps with time greater than 50 minutes, they might be rare and standalone incidents so we simply remove them.
+There are few delays and gaps with time greater than 50 minutes, they might be rare and standalone events, so we drop them.
 
 
 ```{r}
@@ -462,12 +524,12 @@ df <- df[df$Min.Delay <= 50 & df$Min.Gap <= 50, ]
 ```
 
 ```{r}
-# Prepare data in long format
+# Gather Min.Delay and Min.Gap into one long-format data frame
 delay_data <- data.frame(
-  Category = c(rep("Min.Delay", length(df$Min.Delay)),
-               rep("Min.Gap", length(df$Min.Gap))),
+  Category = rep(c("Min.Delay", "Min.Gap"), each = nrow(df)),
   Value = c(df$Min.Delay, df$Min.Gap)
 )
+
 
 # Plot
 ggplot(delay_data, aes(x = Category, y = Value)) +
@@ -484,52 +546,8 @@ ggplot(delay_data, aes(x = Category, y = Value)) +
 stat.desc(df[, c("Min.Delay", "Min.Gap")])
 
 ```
-
-```{r}
-par(mfrow = c(2, 2))
-
-hist(df$Min.Delay, 
-   main = "Delay (in Minutes)", 
-   xlab = "Value", 
-   ylab = "Frequency", 
-   col = "#ADD8E6", 
-   freq = FALSE) # `freq = FALSE` scales the histogram for overlaying density
-lines(density(df$Min.Delay))
-
-hist(df$Min.Gap, 
-   main = "Gap (in Minutes)", 
-   xlab = "Value", 
-   ylab = "Frequency", 
-   col = "#ADD8E6", 
-   freq = FALSE) # `freq = FALSE` scales the histogram for overlaying density
-lines(density(df$Min.Gap))
-```
-
-Since there are a lot of reported incidents that have caused 0 mins delay, it might be a good idea to remove them from our data frame as it skews our data and can create bias in our models later on.
-
-```{r}
-df <- df[df$Min.Delay > 0 & df$Min.Gap > 0, ]
-
-par(mfrow = c(2, 2))
-
-hist(df$Min.Delay, 
-   main = "Delay (in Minutes)", 
-   xlab = "Value", 
-   ylab = "Frequency", 
-   col = "#ADD8E6", 
-   freq = FALSE) # `freq = FALSE` scales the histogram for overlaying density
-lines(density(df$Min.Delay))
-
-hist(df$Min.Gap, 
-   main = "Gap (in Minutes)", 
-   xlab = "Value", 
-   ylab = "Frequency", 
-   col = "#ADD8E6", 
-   freq = FALSE) # `freq = FALSE` scales the histogram for overlaying density
-lines(density(df$Min.Gap))
-
-```
-
+  
+  
 Checking for correlation: 
 
 ```{r}
@@ -540,9 +558,41 @@ round(cr, 2)
 Since Delay of one train and the Gap between trains are highly correlated, we can drop one. Here we chose to drop Min.Gap.
 
 ```{r}
-df <- df[, -6]
+df <- df[, -5]
 summary(df)
 ```
+
+```{r}
+par(mfrow = c(2, 2))
+
+hist(df$Min.Delay, 
+   main = "Delay (in Minutes)", 
+   xlab = "Value", 
+   ylab = "Frequency", 
+   col = "#ADD8E6", 
+   freq = FALSE) # `freq = FALSE` scales the histogram for overlaying density
+lines(density(df$Min.Delay))
+
+```
+
+Since there are a lot of reported incidents that have caused 0 mins delay, it might be a good idea to remove them from our data frame as it skews our data and can create bias in our models later on.
+
+```{r}
+#df <- df[df$Min.Delay > 0 & df$Min.Gap > 0, ]
+
+par(mfrow = c(2, 2))
+
+hist(df$Min.Delay, 
+   main = "Delay (in Minutes)", 
+   xlab = "Value", 
+   ylab = "Frequency", 
+   col = "#ADD8E6", 
+   freq = FALSE) # `freq = FALSE` scales the histogram for overlaying density
+lines(density(df$Min.Delay))
+
+
+```
+
 
 Now we can see that in *Bound*, the null values are just 125 and in *Vehicle* the null values are 130. This is not a significant number so we drop them as well.
 
@@ -568,15 +618,7 @@ df$DelayOver5 <- df$Min.Delay > 5
 
 df <- df[, -5]
 
-# Create new WeekGroup variable
-df$Day <- as.character(df$Day)
 
-df$WeekGroup <- ifelse(df$Day %in% c("Saturday", "Sunday"), "Weekend", "Weekday")
-
-df$WeekGroup <- factor(df$WeekGroup)
-df <- df[, -2]
-
-summary(df)
 
 ```
 Since, we will just look at WeekEnd or WeekDay we also won't need Date as we are not considering public holidays or events.
