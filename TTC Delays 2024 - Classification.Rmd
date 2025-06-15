@@ -25,7 +25,7 @@ knitr::opts_chunk$set(fig.width = 7, fig.height = 5,
                       fig.path = 'Figs/', echo = TRUE)
 
 #This sets the working directory
-knitr::opts_knit$set(root.dir = 'C:/Users/ROG/Desktop/Canada/Projects/R/TTC Delay Data')
+knitr::opts_knit$set(root.dir = 'C:/Users/ROG/Desktop/Canada/Projects/R/TTC Delay Data/ttc-delay-data')
 ```
 
 
@@ -211,29 +211,85 @@ levels(df$Line)
 ```{r}
 summary(df)
 ```
+  
+
+SRT is the Scarborouh RT line that was decommissioned in 2023, so we can drop that and YU-BD is Interchane delays involving both Line 1 (YU) and Line 2 (BD). There aren't many observations there, we will keep them for now.
+  
+```{r}
+
+# Remove rows where Line is "SRT"
+df <- df[df$Line != "SRT", ]
+
+# Drop unused factor levels
+df$Line <- droplevels(df$Line)
+
+# Check final levels
+levels(df$Line)
+```
 
 ```{r, include=FALSE}
 levels(df$Code)
 ```
 
 
-Now looking into Code we found one entry with invalid value, so we simply remove them. 
+Now looking into Code we found one entry with invalid value, so we simply remove them. We also have,
+
+ - EU* includes all delays caused by faulty train components, brakes, doors, air, voltage issues — grouped into Equipment Issue.
+  
+ - MU* includes injuries, no staff available, ESA-related, weather, etc. — best described as Operational/Medical.
+  
+ - PU* includes power failure, signals, controllers — so Signal/Power/Comms.
+  
+ - SU* includes assaults, police holds, robbery, suspicious package — clearly Security/Police.
+  
+ - TU* covers operator error, overspeed, control errors — best labeled as Operator Error / Transit Control.
+
+
 ```{r}
 df$Code <- as.character(df$Code)
 
 # Remove invalid codes
-df$Code[df$Code %in% c("XXXXX")] <- NA
+df$Code[df$Code %in% c("", "XXXXX")] <- NA
+
+# Group by prefix-based categories aligned with descriptions
+df$CodeGroup <- NA
+
+# EU = Equipment-related (RC&S + mechanical)
+df$CodeGroup[grepl("^EU", df$Code)] <- "Equipment Issue"
+
+# MU = Miscellaneous Utility (includes injuries, ESA, etc.)
+df$CodeGroup[grepl("^MU", df$Code)] <- "Operational/Medical"
+
+# PU = Power, Communications, Signal-related
+df$CodeGroup[grepl("^PU", df$Code)] <- "Signal/Power/Comms"
+
+# SU = Security or Police-related
+df$CodeGroup[grepl("^SU", df$Code)] <- "Security/Police"
+
+# TU = Operator or Transit related errors
+df$CodeGroup[grepl("^TU", df$Code)] <- "Operator Error / Transit Control"
+
+# Everything else
+df$CodeGroup[is.na(df$CodeGroup)] <- "Other"
+
+# Drop any rows with missing Code
 df <- df[!is.na(df$Code), ]
 
+# Convert back to factors
 df$Code <- factor(df$Code)
+df$CodeGroup <- factor(df$CodeGroup)
 
 ```
+
+
 ```{r}
 summary(df)
 ```
 Now in *Bound*, there is "B" which is ambiguous and missing values. Similarly, in case of Vehicle as well "0" is definitely missing values. 
 <br>
 Significant number of rows are missing in both Bound and Vehicle, so we cannot simply drop them. We keep values with None for now. But B is just 29 observations so we drop all observations with B.
+<br>
+And we also drop the *code* column as we don't need them now.
 
 ```{r}
 df$Bound <- as.character(df$Bound)
@@ -242,6 +298,10 @@ df$Bound <- as.character(df$Bound)
 df <- df[df$Bound != "B", ]
 
 df$Bound <- as.factor(df$Bound)
+
+# Droppin the code column
+
+df <- df[ ,-4]
 ```
 
 
@@ -292,6 +352,88 @@ df$Station <- factor(df$Station)
 
 <br>
 
+```{r}
+levels(df$Station)
+```
+  
+The station names are much cleaner now, but some duplicates, typos, and inconsistent naming remain.
+
+```{r}
+df$Station <- as.character(df$Station)
+
+# Fix common typos and duplicates
+df$Station[df$Station == "KENNDY"] <- "KENNEDY"
+df$Station[df$Station == "KILPING"] <- "KIPLING"
+df$Station[df$Station == "ST GEOGE"] <- "ST GEORGE"
+df$Station[df$Station == "ST. CLAIR"] <- "ST CLAIR"
+df$Station[df$Station == "ST. CLAIR WEST"] <- "ST CLAIR WEST"
+df$Station[df$Station == "ST. GEORGE"] <- "ST GEORGE"
+df$Station[df$Station == "WISLON"] <- "WILSON"
+df$Station[df$Station == "YOUNGE-UNIVERSITY-SPAD"] <- "YONGE-UNIVERSITY-SPADINA"
+df$Station[df$Station == "FINCH STN 39 BUS PLATF"] <- "FINCH"
+df$Station[df$Station %in% c("DAVISVILLE BUILD-UP", "DAVISVILLE BUILD UP", "DAVISVILLE BUILDUP")] <- "DAVISVILLE"
+df$Station[df$Station == "OLD MILLS"] <- "OLD MILL"
+df$Station[df$Station %in% c("SHEPPARD YONGE", "SHEPPARD-YONGE")] <- "SHEPPARD-YONGE"
+df$Station[df$Station == "SPADINA YUS"] <- "SPADINA"
+df$Station[df$Station == "BLOOR SATION"] <- "BLOOR"
+df$Station[df$Station == "DOWNVIEW PARK STN"] <- "DOWNSVIEW PARK"
+df$Station[df$Station == "FINCH WEST CENTER TRAC"] <- "FINCH WEST"
+df$Station[df$Station == "LAWRENCE WEST CENTER T"] <- "LAWRENCE WEST"
+df$Station[df$Station == "OSGOODE POCKET"] <- "OSGOODE"
+df$Station[df$Station %in% c("SCARBOROUGH CENTRE STA", "SCARBOROUGH CTR STATIO")] <- "SCARBOROUGH CENTRE"
+df$Station[df$Station == "SHEBOURNE"] <- "SHERBOURNE"
+df$Station[df$Station %in% c("ST GEORGE BD/YU STATIO", "ST GEORGE YUS")] <- "ST GEORGE"
+df$Station[df$Station == "YORK UNIVERSITY STATIO"] <- "YORK UNIVERSITY"
+df$Station[df$Station == "KING COMMERCE"] <- "KING"
+df$Station[df$Station == "VAUGHAN MC"] <- "VMC"
+df$Station[df$Station == "NORTH YORK CTR"] <- "NORTH YORK CENTRE"
+df$Station[df$Station == "SHEPPARD TAIL"] <- NA  # if not a valid stop
+df$Station[df$Station == "YONGE"] <- "YONGE-UNIVERSITY-SPADINA"
+
+df <- df[!is.na(df$Station), ]
+df$Station <- factor(df$Station)
+
+# Collapse YONGE variants
+df$Station[df$Station %in% c(
+  "YONGE-UNIVERISTY & BLO", "YONGE-UNIVERSITY", "YONGE-UNIVERSITY-SPADI", 
+  "YONGE-UNIVERSITY & BLO", "YONGE-UNIVERSITY SUBWA", "YONGE / UNIVERSITY LIN",
+  "YONGE UNIVERSITY", "YONGE UNIVERSITY / BLO", "YONGE UNIVERSITY SUBWA",
+  "YONGE/UNIVERSITY/SPADI"
+)] <- "YONGE-UNIVERSITY-SPADINA"
+
+# Drop ambiguous or irrelevant entries
+drop_stations <- c(
+  "JANE & RUNNYMEDE STATI",
+  "KENNEDY, DON MILLS, SC",
+  "LOST ARTICLES OFFICE",
+  "MCDONALD CARTIER EMERG",
+  "MULTIPLE"
+)
+df <- df[!df$Station %in% drop_stations, ]
+
+# Remove non-public stations
+df <- df[!df$Station %in% c(
+  "111 SPADINA ROAD", 
+  "1900 YONGE MCBRIEN BLD", 
+  "1900 YONGE ST- MCBRIEN", 
+  "2233 SHEPPARD WEST", 
+  "ALL", 
+  "BUCHAN ESB"
+), ]
+
+# merge "YONGE-UNIVERSITY-SPADINA" into "YONGE-UNIVERSITY" 
+df$Station <- as.character(df$Station)
+df$Station[df$Station == "YONGE-UNIVERSITY-SPADINA"] <- "YONGE-UNIVERSITY"
+df$Station <- factor(df$Station)
+
+# Refactor again
+df$Station <- factor(df$Station)
+
+```
+
+```{r}
+levels(df$Station)
+```
 
 ```{r}
 # Prepare data in long format
